@@ -1,0 +1,25 @@
+# Dockerfile para Railway - FFmpeg Service
+FROM python:3.11-slim
+
+# Instala FFmpeg e dependências
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cria diretório de trabalho
+WORKDIR /app
+
+# Copia requirements
+COPY requirements.txt .
+
+# Instala dependências Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copia código da aplicação
+COPY app.py .
+
+# Expõe porta
+EXPOSE 5000
+
+# Comando para rodar
+CMD ["python", "app.py"]

@@ -1,0 +1,6 @@
+# nixpacks.toml - Configuração para Railway
+[phases.setup]
+nixPkgs = ["ffmpeg"]
+
+[start]
+cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300"
