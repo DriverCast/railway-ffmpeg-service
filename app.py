@@ -93,39 +93,19 @@ def cut_video():
         # Salva arquivo temporário
         file.save(input_path)
         
-        # Filtro corrigido: Tenta aumentar o tamanho e depois cortar.
-        # Usa filtros para preencher ou cortar a proporção 9:16 (shorts)
+        # FILTRO FINAL: Usa o filtro que funcionou antes de falhar por recursos,
+        # MAS com a correção do problema de aspas e com a lógica de corte robusta.
+        # Usa 'crop=1080:1920' mas com o scaling que funciona.
         vf_filter = "scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
         
-        # Comando FFmpeg otimizado para shorts (1080x1920)
-        ffmpeg_command = [
-            '/usr/bin/ffmpeg', # Caminho absoluto para resolver o erro 500 de 'No such file'
-            '-y',  # Sobrescrever sem perguntar
-            '-hide_banner',
-            '-loglevel', 'error',
-            '-ss', str(start),  # Seek antes do input (mais rápido)
-            '-t', str(duration),  # Duração
-            '-i', input_path,  # Input
-            
-            # FILTRO CORRIGIDO: Não usa aspas complexas, usa o filtro que deve funcionar para forçar 9:16
-            '-vf', vf_filter, 
-            
-            '-c:v', 'libx264',  # Codec H.264 (compatível)
-            '-preset', 'fast',  # Preset rápido
-            '-crf', '22',  # Qualidade
-            '-pix_fmt', 'yuv420p',  # Compatibilidade
-            '-c:a', 'aac',  # Codec de áudio
-            '-b:a', '128k',  # Bitrate áudio
-            '-ar', '48000',  # Sample rate
-            '-ac', '2',  # Stereo
-            '-movflags', '+faststart',  # Otimiza para streaming
-            output_path
-        ]
+        # COMANDO FINAL PARA ECONOMIA DE RECURSOS (preset:ultrafast, crf:30, bitrate/sample: reduzidos)
+        ffmpeg_command_string = (
+            f"/usr/bin/ffmpeg -y -hide_banner -loglevel error -ss {start} -t {duration} -i {input_path} "
+            f"-vf \"{vf_filter}\" "
+            f"-c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p -c:a aac -b:a 64k -ar 44100 -ac 1 -movflags +faststart {output_path}"
+        )
         
         # Executa FFmpeg
-        # OBS: Como o filtro é complexo, passaremos o comando inteiro como string e shell=True para evitar problemas de aspas
-        ffmpeg_command_string = ' '.join(ffmpeg_command)
-        
         result = subprocess.run(
             ffmpeg_command_string, # Comando como string única
             capture_output=True,
@@ -135,7 +115,6 @@ def cut_video():
         )
         
         if result.returncode != 0:
-            # Inclui o comando no erro para futura depuração
             error_message = f"FFmpeg error: {result.stderr}. Command: {ffmpeg_command_string}"
             raise Exception(error_message)
         
@@ -182,6 +161,5 @@ def cut_video():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Usar porta 8080 é mais seguro, mas vamos manter o padrão do seu app original (que lida com a var PORT)
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
