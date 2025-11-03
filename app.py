@@ -18,7 +18,7 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and file.filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def validate_timestamp(value):
     """Valida se é número positivo"""
@@ -93,15 +93,15 @@ def cut_video():
         # Salva arquivo temporário
         file.save(input_path)
         
-        # Filtro: Mantém a proporção 9:16 (vertical) em 1080p
-        vf_filter = "scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+        # Filtro FINAL: Reduz a resolução para 720p vertical (720x1280) para economizar RAM/CPU
+        vf_filter = "scale=w=720:h=1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
         
         # COMANDO FINAL: ALTA QUALIDADE DE IMAGEM (fast/crf 22) + REMOÇÃO DE ÁUDIO (-an)
         ffmpeg_command_string = (
             f"/usr/bin/ffmpeg -y -hide_banner -loglevel error -ss {start} -t {duration} -i {input_path} "
-            f"-vf \"{vf_filter}\" "
-            f"-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p " # <--- IMAGEM DE ALTA QUALIDADE
-            f"-an " # <--- CRUCIAL: REMOVE TODOS OS FLUXOS DE ÁUDIO para economizar RAM
+            f"-vf \"{vf_filter}\" " # FILTRO 720P MAIS LEVE
+            f"-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p " # QUALIDADE DE IMAGEM ALTA
+            f"-an " # REMOVE ÁUDIO
             f"-movflags +faststart {output_path}"
         )
         
