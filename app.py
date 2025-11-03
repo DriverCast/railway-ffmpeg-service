@@ -93,16 +93,23 @@ def cut_video():
         # Salva arquivo temporário
         file.save(input_path)
         
+        # Filtro corrigido: Tenta aumentar o tamanho e depois cortar.
+        # Usa filtros para preencher ou cortar a proporção 9:16 (shorts)
+        vf_filter = "scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+        
         # Comando FFmpeg otimizado para shorts (1080x1920)
         ffmpeg_command = [
-            '/usr/bin/ffmpeg',
+            '/usr/bin/ffmpeg', # Caminho absoluto para resolver o erro 500 de 'No such file'
             '-y',  # Sobrescrever sem perguntar
             '-hide_banner',
             '-loglevel', 'error',
             '-ss', str(start),  # Seek antes do input (mais rápido)
             '-t', str(duration),  # Duração
             '-i', input_path,  # Input
-            '-vf', "scale='min(1080,iw)':'min(1920,ih)':force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",  # Crop para 9:16
+            
+            # FILTRO CORRIGIDO: Não usa aspas complexas, usa o filtro que deve funcionar para forçar 9:16
+            '-vf', vf_filter, 
+            
             '-c:v', 'libx264',  # Codec H.264 (compatível)
             '-preset', 'fast',  # Preset rápido
             '-crf', '22',  # Qualidade
@@ -116,15 +123,21 @@ def cut_video():
         ]
         
         # Executa FFmpeg
+        # OBS: Como o filtro é complexo, passaremos o comando inteiro como string e shell=True para evitar problemas de aspas
+        ffmpeg_command_string = ' '.join(ffmpeg_command)
+        
         result = subprocess.run(
-            ffmpeg_command,
+            ffmpeg_command_string, # Comando como string única
             capture_output=True,
             text=True,
-            timeout=300  # 5 minutos timeout
+            timeout=300,  # 5 minutos timeout
+            shell=True # CRUCIAL: Executa via shell para evitar erros de aspas no filtro
         )
         
         if result.returncode != 0:
-            raise Exception(f"FFmpeg error: {result.stderr}")
+            # Inclui o comando no erro para futura depuração
+            error_message = f"FFmpeg error: {result.stderr}. Command: {ffmpeg_command_string}"
+            raise Exception(error_message)
         
         # Verifica se arquivo foi criado
         if not os.path.exists(output_path):
@@ -165,8 +178,10 @@ def cut_video():
             os.remove(input_path)
         if os.path.exists(output_path):
             os.remove(output_path)
+        # Retorna o erro exato
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # Usar porta 8080 é mais seguro, mas vamos manter o padrão do seu app original (que lida com a var PORT)
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
