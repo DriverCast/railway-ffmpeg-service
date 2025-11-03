@@ -93,25 +93,25 @@ def cut_video():
         # Salva arquivo temporário
         file.save(input_path)
         
-        # FILTRO FINAL: Usa o filtro que funcionou antes de falhar por recursos,
-        # MAS com a correção do problema de aspas e com a lógica de corte robusta.
-        # Usa 'crop=1080:1920' mas com o scaling que funciona.
+        # Filtro: Mantém a proporção 9:16 (vertical) em 1080p
         vf_filter = "scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
         
-        # COMANDO FINAL PARA ECONOMIA DE RECURSOS (preset:ultrafast, crf:30, bitrate/sample: reduzidos)
+        # COMANDO FINAL: ALTA QUALIDADE DE IMAGEM (fast/crf 22) + REMOÇÃO DE ÁUDIO (-an)
         ffmpeg_command_string = (
             f"/usr/bin/ffmpeg -y -hide_banner -loglevel error -ss {start} -t {duration} -i {input_path} "
             f"-vf \"{vf_filter}\" "
-            f"-c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p -c:a aac -b:a 64k -ar 44100 -ac 1 -movflags +faststart {output_path}"
+            f"-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p " # <--- IMAGEM DE ALTA QUALIDADE
+            f"-an " # <--- CRUCIAL: REMOVE TODOS OS FLUXOS DE ÁUDIO para economizar RAM
+            f"-movflags +faststart {output_path}"
         )
         
         # Executa FFmpeg
         result = subprocess.run(
-            ffmpeg_command_string, # Comando como string única
+            ffmpeg_command_string, 
             capture_output=True,
             text=True,
-            timeout=300,  # 5 minutos timeout
-            shell=True # CRUCIAL: Executa via shell para evitar erros de aspas no filtro
+            timeout=300, 
+            shell=True 
         )
         
         if result.returncode != 0:
@@ -159,7 +159,7 @@ def cut_video():
             os.remove(output_path)
         # Retorna o erro exato
         return jsonify({'error': str(e)}), 500
-
+        
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
