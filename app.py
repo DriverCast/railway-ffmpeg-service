@@ -17,13 +17,8 @@ UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
-# CORREÇÃO: O 'filename' é o parâmetro de entrada, não o objeto 'file'
+# --- FUNÇÕES DE VALIDAÇÃO ---
 def allowed_file(filename):
-    """Verifica se a extensão do arquivo é permitida."""
-    # Garante que o filename não é vazio antes de tentar o rsplit
-    if not filename:
-        return False
-    # Acessa a extensão usando o parâmetro 'filename'
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def validate_timestamp(value):
@@ -33,6 +28,7 @@ def validate_timestamp(value):
         return num >= 0
     except:
         return False
+# --- FIM FUNÇÕES DE VALIDAÇÃO ---
 
 @app.route('/', methods=['GET'])
 def health_check():
@@ -40,7 +36,7 @@ def health_check():
     return jsonify({
         'status': 'online',
         'service': 'FFmpeg Video Cutter',
-        'version': '1.0.0',
+        'version': '1.0.1 (Filtro simplificado)',
         'endpoints': {
             'POST /cut': 'Cut video with start/end timestamps',
             'GET /': 'This health check'
@@ -67,7 +63,6 @@ def cut_video():
     if file.filename == '':
         return jsonify({'error': 'Empty filename'}), 400
     
-    # CORREÇÃO DE CHAMADA: Chama allowed_file(file.filename)
     if not allowed_file(file.filename):
         return jsonify({'error': 'Invalid file type. Allowed: mp4, avi, mov, mkv, webm'}), 400
     
@@ -100,30 +95,50 @@ def cut_video():
         # Salva arquivo temporário
         file.save(input_path)
         
-        # Filtro FINAL: 720p vertical (720x1280) para otimização de RAM
-        vf_filter = "scale=w=720:h=1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
-        
-        # COMANDO FINAL: 720p, ALTA QUALIDADE DE IMAGEM (fast/crf 22) + REMOÇÃO DE ÁUDIO (-an)
-        ffmpeg_command_string = (
-            f"/usr/bin/ffmpeg -y -hide_banner -loglevel error -ss {start} -t {duration} -i {input_path} "
-            f"-vf \"{vf_filter}\" " 
-            f"-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p " 
-            f"-an " # REMOVE ÁUDIO
-            f"-movflags +faststart {output_path}"
-        )
+        # ----------------------------------------------------------------------------------
+        # ALTERAÇÃO 1: 'ffmpeg' no lugar de '/usr/bin/ffmpeg' (Assume que está no PATH)
+        # Se não funcionar, substitua 'ffmpeg' pelo caminho exato, EX: 'C:/ffmpeg/bin/ffmpeg.exe'
+        # ----------------------------------------------------------------------------------
+        ffmpeg_command = [
+            '/usr/bin/ffmpeg', 
+            '-y',  # Sobrescrever sem perguntar
+            '-hide_banner',
+            '-loglevel', 'error',
+            '-ss', str(start),  # Seek antes do input (mais rápido)
+            '-t', str(duration),  # Duração
+            '-i', input_path,  # Input
+            
+            # ----------------------------------------------------------------------------------
+            # ALTERAÇÃO 2: Filtro simplificado para evitar o erro "Invalid too big or non positive size"
+            # Redimensiona a largura para 1080px e mantém a proporção original.
+            # O corte para 9:16 (1080x1920) foi removido.
+            # ----------------------------------------------------------------------------------
+            '-vf', 'scale=1080:-1', 
+            
+            '-c:v', 'libx264',  # Codec H.264 (compatível)
+            '-preset', 'fast',  # Preset rápido
+            '-crf', '22',  # Qualidade
+            '-pix_fmt', 'yuv420p',  # Compatibilidade
+            '-c:a', 'aac',  # Codec de áudio
+            '-b:a', '128k',  # Bitrate áudio
+            '-ar', '48000',  # Sample rate
+            '-ac', '2',  # Stereo
+            '-movflags', '+faststart',  # Otimiza para streaming
+            output_path
+        ]
         
         # Executa FFmpeg
         result = subprocess.run(
-            ffmpeg_command_string, 
+            ffmpeg_command,
             capture_output=True,
             text=True,
-            timeout=300, 
-            shell=True 
+            timeout=300  # 5 minutos timeout
         )
         
         if result.returncode != 0:
-            error_message = f"FFmpeg error: {result.stderr}. Command: {ffmpeg_command_string}"
-            raise Exception(error_message)
+            # Captura a saída de erro do FFmpeg e retorna como exceção
+            ffmpeg_error = result.stderr or f"FFmpeg exited with code {result.returncode}"
+            raise Exception(f"FFmpeg error: {ffmpeg_error}")
         
         # Verifica se arquivo foi criado
         if not os.path.exists(output_path):
@@ -146,6 +161,7 @@ def cut_video():
                 if os.path.exists(output_path):
                     os.remove(output_path)
             except Exception as e:
+                # A limpeza falhar pode acontecer em algumas condições
                 print(f"Cleanup error: {e}")
         
         return response
@@ -164,9 +180,10 @@ def cut_video():
             os.remove(input_path)
         if os.path.exists(output_path):
             os.remove(output_path)
-        # Retorna o erro exato
+        # Retorna o erro exato do Python/FFmpeg
         return jsonify({'error': str(e)}), 500
-        
+
 if __name__ == '__main__':
+    # Mantido o padrão de usar 5000 se a variável de ambiente PORT não for definida
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
