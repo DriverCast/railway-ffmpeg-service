@@ -95,7 +95,7 @@ def cut_video():
         
         # Comando FFmpeg otimizado para shorts (1080x1920)
         ffmpeg_command = [
-            'ffmpeg',
+            '/usr/bin/ffmpeg',
             '-y',  # Sobrescrever sem perguntar
             '-hide_banner',
             '-loglevel', 'error',
